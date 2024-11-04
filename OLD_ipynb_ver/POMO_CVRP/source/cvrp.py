@@ -293,7 +293,7 @@ class ENVIRONMENT:
 
 class GROUP_ENVIRONMENT:
 
-    def __init__(self, depot_xy, node_xy, node_demand):
+    def __init__(self, depot_xy, node_xy, node_demand, obj_type):
         # depot_xy.shape = (batch, 1, 2)
         # node_xy.shape = (batch, problem, 2)
         # node_demand.shape = (batch, problem, 1)
@@ -301,6 +301,7 @@ class GROUP_ENVIRONMENT:
         self.batch_s = depot_xy.size(0)
         self.group_s = None
         self.group_state = None
+        self.obj_type = obj_type
 
         all_node_xy = torch.cat((depot_xy, node_xy), dim=1)
         # shape = (batch, problem+1, 2)
@@ -334,6 +335,10 @@ class GROUP_ENVIRONMENT:
         else:
             reward = None
         return self.group_state, reward, done
+
+    def _get_objective_value(self):
+        if self.mode == "summin":
+            return self._get_travel_distance()
 
     def _get_travel_distance(self):
         all_node_xy = self.data[:, None, :, 0:2].expand(self.batch_s, self.group_s, -1, 2)
