@@ -66,6 +66,7 @@ class ACTOR(nn.Module):
         self.node_prob_calculator.reset(self.encoded_nodes)
 
     def get_action_probabilities(self, group_state):
+        # 
         encoded_LAST_NODES = pick_nodes_for_each_group(self.encoded_nodes, group_state.current_node)
         # shape = (batch, group, EMBEDDING_DIM)
         remaining_loaded = group_state.loaded[:, :, None]

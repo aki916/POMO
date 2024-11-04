@@ -151,9 +151,11 @@ class STATE:
         # Status Edit
         ####################################
         self.visited_ninf_flag[:, 0][~self.at_the_depot] = 0  # allow car to visit depot anytime
+        # loadedは残りの空間を表す
         demand_too_large = self.loaded[:, None] < demand_list
         # shape = (batch, problem+1)
         self.ninf_mask = self.visited_ninf_flag.clone()
+        # 次に選ばれないようにマスクをかけている
         self.ninf_mask[demand_too_large] = -np.inf
 
         self.ninf_mask[self.finished[:, None].expand(self.batch_s, PROBLEM_SIZE+1)] = 0  # do not mask finished episode
@@ -208,7 +210,9 @@ class GROUP_STATE:
         selected_demand = demand_list.gather(dim=2, index=gathering_index).squeeze(dim=2)
         # shape = (batch, group)
         self.loaded -= selected_demand
-        self.loaded[self.at_the_depot] = 1 # refill loaded at the depot
+        # refill loaded at the depot
+        self.loaded[self.at_the_depot] = 1 
+        # print(self.loaded.reshape(1,-1))
         batch_idx_mat = torch.arange(self.batch_s)[:, None].expand(self.batch_s, self.group_s)
         group_idx_mat = torch.arange(self.group_s)[None, :].expand(self.batch_s, self.group_s)
         self.visited_ninf_flag[batch_idx_mat, group_idx_mat, selected_idx_mat] = -np.inf
@@ -303,6 +307,8 @@ class GROUP_ENVIRONMENT:
         depot_demand = Tensor(np.zeros((self.batch_s, 1, 1)))
         all_node_demand = torch.cat((depot_demand, node_demand), dim=1)
         # shape = (batch, problem+1, 1)
+        # demandが正規化されてる？小数になってる
+        # capacityどーこだ, next_node決めるところに制約で追加した方が良さそう
         self.data = torch.cat((all_node_xy, all_node_demand), dim=2)
         # shape = (batch, problem+1, 3)
 
@@ -321,6 +327,7 @@ class GROUP_ENVIRONMENT:
         self.group_state.move_to(selected_idx_mat)
 
         # returning values
+        # 全部のflag(finished)がTrueかを試す
         done = self.group_state.finished.all()  # state.finished.shape = (batch, group)
         if done:
             reward = -self._get_travel_distance()  # note the minus sign!
@@ -336,6 +343,7 @@ class GROUP_ENVIRONMENT:
         ordered_seq = all_node_xy.gather(dim=2, index=gathering_index)
         # shape = (batch, group, selected_count, 2)
 
+        # １つずらしてる
         rolled_seq = ordered_seq.roll(dims=2, shifts=-1)
         segment_lengths = ((ordered_seq-rolled_seq)**2).sum(3).sqrt()
         # size = (batch, group, selected_count)
