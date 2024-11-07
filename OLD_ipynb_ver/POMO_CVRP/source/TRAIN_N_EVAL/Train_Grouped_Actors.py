@@ -68,7 +68,7 @@ def TRAIN(grouped_actor, epoch, timer_start, logger):
 
         # Actor Group Move
         ###############################################
-        env = GROUP_ENVIRONMENT(depot_xy, node_xy, node_demand, "summin")
+        env = GROUP_ENVIRONMENT(depot_xy, node_xy, node_demand, "maxmin")
         group_s = PROBLEM_SIZE
         group_state, reward, done = env.reset(group_size=group_s)
         grouped_actor.reset(group_state)

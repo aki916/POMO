@@ -1,4 +1,3 @@
-
 """
 The MIT License
 
@@ -25,25 +24,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 ####################################
 # EXTERNAL LIBRARY
 ####################################
-import torch
 import numpy as np
-
-# For debugging
-from IPython.core.debugger import set_trace
-
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-
+import torch
 
 ####################################
 # PROJECT VARIABLES
 ####################################
 from HYPER_PARAMS import *
+
+# For debugging
+# from IPython.core.debugger import set_trace
+from torch.utils.data import DataLoader, Dataset
 from TORCH_OBJECTS import *
+from tqdm import tqdm
 
 
 ####################################
@@ -51,11 +47,13 @@ from TORCH_OBJECTS import *
 ####################################
 def CVRP_DATA_LOADER__RANDOM(num_sample, num_nodes, batch_size):
     dataset = CVRP_Dataset__Random(num_sample=num_sample, num_nodes=num_nodes)
-    data_loader = DataLoader(dataset=dataset,
-                             batch_size=batch_size,
-                             shuffle=False,
-                             num_workers=0,
-                             collate_fn=CVRP_collate_fn)
+    data_loader = DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=CVRP_collate_fn,
+    )
     return data_loader
 
 
@@ -89,7 +87,9 @@ def CVRP_collate_fn(batch):
     depot_xy_data_tuples, node_xy_data_tuples, node_demand_data_tuples = zip(*batch)
     depot_xy = Tensor(depot_xy_data_tuples)
     node_xy = Tensor(node_xy_data_tuples)
-    node_demand = Tensor(node_demand_data_tuples)[:, :, None]  # unsqeeeze to match the shape of node_xy
+    node_demand = Tensor(node_demand_data_tuples)[
+        :, :, None
+    ]  # unsqeeeze to match the shape of node_xy
     return depot_xy, node_xy, node_demand
 
 
@@ -97,7 +97,6 @@ def CVRP_collate_fn(batch):
 # STATE
 ####################################
 class STATE:
-
     def __init__(self, data):
         # data.shape = (batch, problem+1, 3)
 
@@ -118,9 +117,9 @@ class STATE:
         # shape = (batch,)
         self.loaded = Tensor(np.ones((self.batch_s,)))
         # shape = (batch,)
-        self.visited_ninf_flag = Tensor(np.zeros((self.batch_s, PROBLEM_SIZE+1)))
+        self.visited_ninf_flag = Tensor(np.zeros((self.batch_s, PROBLEM_SIZE + 1)))
         # shape = (batch, problem+1)
-        self.ninf_mask = Tensor(np.zeros((self.batch_s, PROBLEM_SIZE+1)))
+        self.ninf_mask = Tensor(np.zeros((self.batch_s, PROBLEM_SIZE + 1)))
         # shape = (batch, problem+1)
         self.finished = BoolTensor(np.zeros((self.batch_s,)))
         # shape = (batch,)
@@ -132,25 +131,31 @@ class STATE:
         ####################################
         self.selected_count += 1
         self.current_node = selected_node_idx
-        self.selected_node_list = torch.cat((self.selected_node_list, selected_node_idx[:, None]), dim=1)
+        self.selected_node_list = torch.cat(
+            (self.selected_node_list, selected_node_idx[:, None]), dim=1
+        )
 
         # Status
         ####################################
-        self.at_the_depot = (selected_node_idx == 0)
+        self.at_the_depot = selected_node_idx == 0
         demand_list = self.data[:, :, 2]
         # shape = (batch, problem+1)
         gathering_index = selected_node_idx[:, None]
-        selected_demand = demand_list.gather(dim=1, index=gathering_index).squeeze(dim=1)
+        selected_demand = demand_list.gather(dim=1, index=gathering_index).squeeze(
+            dim=1
+        )
         # shape = (batch,)
         self.loaded -= selected_demand
-        self.loaded[self.at_the_depot] = 1 # refill loaded at the depot
+        self.loaded[self.at_the_depot] = 1  # refill loaded at the depot
         self.visited_ninf_flag[torch.arange(self.batch_s), selected_node_idx] = -np.inf
         self.finished = self.finished + (self.visited_ninf_flag == -np.inf).all(dim=1)
         # shape = (batch,)
 
         # Status Edit
         ####################################
-        self.visited_ninf_flag[:, 0][~self.at_the_depot] = 0  # allow car to visit depot anytime
+        self.visited_ninf_flag[:, 0][~self.at_the_depot] = (
+            0  # allow car to visit depot anytime
+        )
         # loadedは残りの空間を表す
         demand_too_large = self.loaded[:, None] < demand_list
         # shape = (batch, problem+1)
@@ -158,12 +163,12 @@ class STATE:
         # 次に選ばれないようにマスクをかけている
         self.ninf_mask[demand_too_large] = -np.inf
 
-        self.ninf_mask[self.finished[:, None].expand(self.batch_s, PROBLEM_SIZE+1)] = 0  # do not mask finished episode
-
+        self.ninf_mask[
+            self.finished[:, None].expand(self.batch_s, PROBLEM_SIZE + 1)
+        ] = 0  # do not mask finished episode
 
 
 class GROUP_STATE:
-
     def __init__(self, group_size, data):
         # data.shape = (batch, problem+1, 3)
 
@@ -185,9 +190,13 @@ class GROUP_STATE:
         # shape = (batch, group)
         self.loaded = Tensor(np.ones((self.batch_s, self.group_s)))
         # shape = (batch, group)
-        self.visited_ninf_flag = Tensor(np.zeros((self.batch_s, self.group_s, PROBLEM_SIZE+1)))
+        self.visited_ninf_flag = Tensor(
+            np.zeros((self.batch_s, self.group_s, PROBLEM_SIZE + 1))
+        )
         # shape = (batch, group, problem+1)
-        self.ninf_mask = Tensor(np.zeros((self.batch_s, self.group_s, PROBLEM_SIZE+1)))
+        self.ninf_mask = Tensor(
+            np.zeros((self.batch_s, self.group_s, PROBLEM_SIZE + 1))
+        )
         # shape = (batch, group, problem+1)
         self.finished = BoolTensor(np.zeros((self.batch_s, self.group_s)))
         # shape = (batch, group)
@@ -199,36 +208,51 @@ class GROUP_STATE:
         ####################################
         self.selected_count += 1
         self.current_node = selected_idx_mat
-        self.selected_node_list = torch.cat((self.selected_node_list, selected_idx_mat[:, :, None]), dim=2)
+        self.selected_node_list = torch.cat(
+            (self.selected_node_list, selected_idx_mat[:, :, None]), dim=2
+        )
 
         # Status
         ####################################
-        self.at_the_depot = (selected_idx_mat == 0)
+        self.at_the_depot = selected_idx_mat == 0
         demand_list = self.data[:, None, :, 2].expand(self.batch_s, self.group_s, -1)
         # shape = (batch, group, problem+1)
         gathering_index = selected_idx_mat[:, :, None]
-        selected_demand = demand_list.gather(dim=2, index=gathering_index).squeeze(dim=2)
+        selected_demand = demand_list.gather(dim=2, index=gathering_index).squeeze(
+            dim=2
+        )
         # shape = (batch, group)
         self.loaded -= selected_demand
         # refill loaded at the depot
-        self.loaded[self.at_the_depot] = 1 
+        self.loaded[self.at_the_depot] = 1
         # print(self.loaded.reshape(1,-1))
-        batch_idx_mat = torch.arange(self.batch_s)[:, None].expand(self.batch_s, self.group_s)
-        group_idx_mat = torch.arange(self.group_s)[None, :].expand(self.batch_s, self.group_s)
+        batch_idx_mat = torch.arange(self.batch_s)[:, None].expand(
+            self.batch_s, self.group_s
+        )
+        group_idx_mat = torch.arange(self.group_s)[None, :].expand(
+            self.batch_s, self.group_s
+        )
         self.visited_ninf_flag[batch_idx_mat, group_idx_mat, selected_idx_mat] = -np.inf
         self.finished = self.finished + (self.visited_ninf_flag == -np.inf).all(dim=2)
         # shape = (batch, group)
 
         # Status Edit
         ####################################
-        self.visited_ninf_flag[:, :, 0][~self.at_the_depot] = 0  # allow car to visit depot anytime
+        self.visited_ninf_flag[:, :, 0][~self.at_the_depot] = (
+            0  # allow car to visit depot anytime
+        )
         round_error_epsilon = 0.000001
         demand_too_large = self.loaded[:, :, None] + round_error_epsilon < demand_list
         # shape = (batch, group, problem+1)
         self.ninf_mask = self.visited_ninf_flag.clone()
+        breakpoint()
         self.ninf_mask[demand_too_large] = -np.inf
 
-        self.ninf_mask[self.finished[:, :, None].expand(self.batch_s, self.group_s, PROBLEM_SIZE+1)] = 0
+        self.ninf_mask[
+            self.finished[:, :, None].expand(
+                self.batch_s, self.group_s, PROBLEM_SIZE + 1
+            )
+        ] = 0
         # do not mask finished episode
 
 
@@ -236,7 +260,6 @@ class GROUP_STATE:
 # ENVIRONMENT
 ####################################
 class ENVIRONMENT:
-
     def __init__(self, depot_xy, node_xy, node_demand):
         # depot_xy.shape = (batch, 1, 2)
         # node_xy.shape = (batch, problem, 2)
@@ -283,7 +306,7 @@ class ENVIRONMENT:
         # shape = (batch, selected_count, 2)
 
         rolled_seq = ordered_seq.roll(dims=1, shifts=-1)
-        segment_lengths = ((ordered_seq-rolled_seq)**2).sum(2).sqrt()
+        segment_lengths = ((ordered_seq - rolled_seq) ** 2).sum(2).sqrt()
         # size = (batch, selected_count)
 
         travel_distances = segment_lengths.sum(1)
@@ -292,7 +315,6 @@ class ENVIRONMENT:
 
 
 class GROUP_ENVIRONMENT:
-
     def __init__(self, depot_xy, node_xy, node_demand, obj_type):
         # depot_xy.shape = (batch, 1, 2)
         # node_xy.shape = (batch, problem, 2)
@@ -331,29 +353,120 @@ class GROUP_ENVIRONMENT:
         # 全部のflag(finished)がTrueかを試す
         done = self.group_state.finished.all()  # state.finished.shape = (batch, group)
         if done:
-            reward = -self._get_travel_distance()  # note the minus sign!
+            reward = -self._get_objective_value()  # note the minus sign!
         else:
             reward = None
         return self.group_state, reward, done
 
     def _get_objective_value(self):
-        if self.mode == "summin":
+        if self.obj_type == "summin":
             return self._get_travel_distance()
+        elif self.obj_type == "maxmin":
+            return self._get_max_travel_distance()
+
+    def _get_max_travel_distance(self):
+        all_node_xy = self.data[:, None, :, 0:2].expand(
+            self.batch_s, self.group_s, -1, 2
+        )
+        # shape = (batch, group, problem+1, 2)
+        gathering_index = self.group_state.selected_node_list[:, :, :, None].expand(
+            -1, -1, -1, 2
+        )
+        # shape = (batch, group, selected_count, 2)
+        # ordered_seq = all_node_xy.gather(dim=2, index=gathering_index)
+        # shape = (batch, group, selected_count, 2)
+
+        all_node_locations = self.data[:, :, 0:2]  # 全データの位置情報を一度に取得
+
+        travel_distances = torch.zeros(
+            [self.batch_s, self.group_s], device=torch.device("cuda")
+        )
+        # 各バッチとグループに対して処理
+        for i in tqdm(range(self.batch_s)):
+            all_node_location = all_node_locations[i]  # i番目のバッチの位置情報
+            selected_nodes = self.group_state.selected_node_list[
+                i
+            ]  # i番目のバッチの選択ノードリスト
+
+            # 各グループに対して処理
+            for j in range(self.group_s):
+                path = torch.tensor(
+                    selected_nodes[j], dtype=torch.long
+                )  # グループのパスをテンソルに変換
+                path_locations = all_node_location[path]  # パスに沿った位置を抽出
+
+                # 距離を計算（隣接ノード間）
+                distances = torch.norm(path_locations[:-1] - path_locations[1:], dim=1)
+
+                # エージェントの数と最大距離を計算
+                zero_indices = (path == 0).nonzero(as_tuple=True)[
+                    0
+                ]  # ノード0が登場するインデックス
+                num_agents = 0
+                max_dist = -1
+                start_idx = 0
+
+                # 連続する (0, 0) をスキップしつつエージェント数をカウント
+                prev_idx = -2  # 初期値を設定
+                # FIXME
+                for idx in zero_indices:
+                    # 連続していない場合にカウント
+                    if idx != prev_idx + 1:
+                        num_agents += 1
+                        # セグメントの距離を計算
+                        segment_dist = distances[start_idx:idx].sum().item()
+                        max_dist = max(max_dist, segment_dist)
+                        start_idx = idx
+                    prev_idx = idx
+
+                # ペナルティ付き距離を計算
+                loss_num_agent = max(0, num_agents - 5)
+                travel_distances[i, j] = loss_num_agent * 100 + max_dist
+
+        # travel_distances = torch.zeros([self.batch_s, self.group_s])
+        # for i in range(self.batch_s):
+        #     print(i)
+        #     all_node_location = self.data[i, :, 0:2]
+        #     for j in range(self.group_s):
+        #         num_agent = 0
+        #         flag = False
+        #         dist = 0
+        #         max_dist = -1
+        #         for u, v in zip(self.group_state.selected_node_list[i][j], self.group_state.selected_node_list[i][j][1:]):
+        #             dist += torch.norm(all_node_location[u] - all_node_location[v])
+        #             if not (u == 0 and v == 0) and v == 0:
+        #                 max_dist = max(dist, max_dist)
+        #                 dist = 0
+        #                 num_agent += 1
+        #         loss_num_agent = max(0, num_agent - 5)
+        #         travel_distances[i][j] = loss_num_agent * 100 + max_dist
+
+        # # １つずらしてる
+        # rolled_seq = ordered_seq.roll(dims=2, shifts=-1)
+        # segment_lengths = ((ordered_seq-rolled_seq)**2).sum(3).sqrt()
+        # # size = (batch, group, selected_count)
+
+        # travel_distances = segment_lengths.sum(2)
+        # size = (batch, group)
+        return travel_distances
 
     def _get_travel_distance(self):
-        all_node_xy = self.data[:, None, :, 0:2].expand(self.batch_s, self.group_s, -1, 2)
+        all_node_xy = self.data[:, None, :, 0:2].expand(
+            self.batch_s, self.group_s, -1, 2
+        )
         # shape = (batch, group, problem+1, 2)
-        gathering_index = self.group_state.selected_node_list[:, :, :, None].expand(-1, -1, -1, 2)
+        gathering_index = self.group_state.selected_node_list[:, :, :, None].expand(
+            -1, -1, -1, 2
+        )
         # shape = (batch, group, selected_count, 2)
         ordered_seq = all_node_xy.gather(dim=2, index=gathering_index)
         # shape = (batch, group, selected_count, 2)
 
         # １つずらしてる
         rolled_seq = ordered_seq.roll(dims=2, shifts=-1)
-        segment_lengths = ((ordered_seq-rolled_seq)**2).sum(3).sqrt()
+        segment_lengths = ((ordered_seq - rolled_seq) ** 2).sum(3).sqrt()
         # size = (batch, group, selected_count)
 
         travel_distances = segment_lengths.sum(2)
         # size = (batch, group)
         return travel_distances
-

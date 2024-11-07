@@ -1,4 +1,3 @@
-
 """
 The MIT License
 
@@ -25,27 +24,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import numpy as np
-
 # For debugging
-from IPython.core.debugger import set_trace
-
+# from IPython.core.debugger import set_trace
 # Hyper Parameters
 from HYPER_PARAMS import *
 from TORCH_OBJECTS import *
-
 
 ########################################
 # ACTOR
 ########################################
 
-class ACTOR(nn.Module):
 
+class ACTOR(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -66,14 +61,20 @@ class ACTOR(nn.Module):
         self.node_prob_calculator.reset(self.encoded_nodes)
 
     def get_action_probabilities(self, group_state):
-        # 
-        encoded_LAST_NODES = pick_nodes_for_each_group(self.encoded_nodes, group_state.current_node)
+        #
+        encoded_LAST_NODES = pick_nodes_for_each_group(
+            self.encoded_nodes, group_state.current_node
+        )
         # shape = (batch, group, EMBEDDING_DIM)
         remaining_loaded = group_state.loaded[:, :, None]
         # shape = (batch, group, 1)
 
-        item_select_probabilities = self.node_prob_calculator(self.encoded_graph, encoded_LAST_NODES,
-                                                              remaining_loaded, ninf_mask=group_state.ninf_mask)
+        item_select_probabilities = self.node_prob_calculator(
+            self.encoded_graph,
+            encoded_LAST_NODES,
+            remaining_loaded,
+            ninf_mask=group_state.ninf_mask,
+        )
         # shape = (batch, group, problem+1)
 
         return item_select_probabilities
@@ -82,6 +83,7 @@ class ACTOR(nn.Module):
 ########################################
 # ACTOR_SUB_NN : ENCODER
 ########################################
+
 
 class Encoder(nn.Module):
     def __init__(self):
@@ -150,11 +152,12 @@ class Encoder_Layer(nn.Module):
 # ACTOR_SUB_NN : Next_Node_Probability_Calculator
 ########################################
 
+
 class Next_Node_Probability_Calculator_for_group(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.Wq = nn.Linear(2*EMBEDDING_DIM+1, HEAD_NUM * KEY_DIM, bias=False)
+        self.Wq = nn.Linear(2 * EMBEDDING_DIM + 1, HEAD_NUM * KEY_DIM, bias=False)
         self.Wk = nn.Linear(EMBEDDING_DIM, HEAD_NUM * KEY_DIM, bias=False)
         self.Wv = nn.Linear(EMBEDDING_DIM, HEAD_NUM * KEY_DIM, bias=False)
 
@@ -183,7 +186,9 @@ class Next_Node_Probability_Calculator_for_group(nn.Module):
 
         #  Multi-Head Attention
         #######################################################
-        input_cat = torch.cat((input1.expand(-1, group_s, -1), input2, remaining_loaded), dim=2)
+        input_cat = torch.cat(
+            (input1.expand(-1, group_s, -1), input2, remaining_loaded), dim=2
+        )
         # shape = (batch, group, 2*EMBEDDING_DIM+1)
 
         q = reshape_by_heads(self.Wq(input_cat), head_num=HEAD_NUM)
@@ -219,6 +224,7 @@ class Next_Node_Probability_Calculator_for_group(nn.Module):
 ########################################
 # NN SUB CLASS / FUNCTIONS
 ########################################
+
 
 def pick_nodes_for_each_group(encoded_nodes, node_index_to_pick):
     # encoded_nodes.shape = (batch, problem, EMBEDDING_DIM)
@@ -264,7 +270,9 @@ def multi_head_attention(q, k, v, ninf_mask=None):
 
     score_scaled = score / np.sqrt(key_dim)
     if ninf_mask is not None:
-        score_scaled = score_scaled + ninf_mask[:, None, :, :].expand(batch_s, head_num, n, problem_s)
+        score_scaled = score_scaled + ninf_mask[:, None, :, :].expand(
+            batch_s, head_num, n, problem_s
+        )
 
     weights = nn.Softmax(dim=3)(score_scaled)
     # shape = (batch, head_num, n, problem)
